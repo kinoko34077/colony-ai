@@ -32,7 +32,7 @@ def connection_status_text(info: dict[str, Any] | None = None, error: str | None
 def format_generations(generations: list[list[str]]) -> str:
     sections = []
     for generation, outputs in enumerate(generations, 1):
-        values = "\n".join(f"{index}. {output or '(空)'}" for index, output in enumerate(outputs, 1))
+        values = "\n".join(f"Node {index}: {output or '(空)'}" for index, output in enumerate(outputs, 1))
         sections.append(f"Generation {generation}\n{values}")
     return "\n\n".join(sections)
 
@@ -87,7 +87,7 @@ class SwarmGui:
         ttk.Label(self.root, textvariable=self.status_var).grid(row=3, column=3, columnspan=2, sticky="w", padx=8)
         self.check_button.grid(row=3, column=5, padx=8, pady=6)
         self.start_button.grid(row=4, column=5, padx=8, pady=6)
-        ttk.Label(self.root, text="各世代の直接出力").grid(row=5, column=0, sticky="w", padx=8)
+        ttk.Label(self.root, text="各ノードの直接出力").grid(row=5, column=0, sticky="w", padx=8)
         ttk.Label(self.root, text="5世代ごとの要約").grid(row=5, column=3, sticky="w", padx=8)
         self.generation_output.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=8, pady=4)
         self.readout_output.grid(row=6, column=3, columnspan=3, sticky="nsew", padx=8, pady=4)

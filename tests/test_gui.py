@@ -39,7 +39,7 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(connection_status_text(error="offline"), "接続失敗: offline")
         rendered = format_result([["世代1の出力"]], ["観測A"], "最終回答", "logs/run.jsonl")
         self.assertIn("Generation 1", rendered["generations"])
-        self.assertIn("世代1の出力", rendered["generations"])
+        self.assertIn("Node 1: 世代1の出力", rendered["generations"])
         self.assertIn("観測A", rendered["readouts"])
         self.assertIn("最終回答", rendered["final"])
 
