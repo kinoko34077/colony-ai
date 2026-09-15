@@ -300,6 +300,9 @@ async def run_experiment(
     seed: int | None = None,
     progress_callback: Callable[[str], None] | None = None,
     event_callback: Callable[[dict[str, Any]], None] | None = None,
+    node_system_prompt: str | None = None,
+    readout_system_prompt: str | None = None,
+    finalizer_system_prompt: str | None = None,
 ) -> ExperimentResult:
     """Run synchronized generations, readouts, and the final synthesis."""
     if not original_prompt.strip():
@@ -307,6 +310,9 @@ async def run_experiment(
     logger = JsonlLogger(log_path)
     rng = random.Random(seed)
     observer_settings = replace(settings, num_ctx=max(settings.num_ctx, 8192))
+    node_system_prompt = node_system_prompt or NODE_SYSTEM_PROMPT
+    readout_system_prompt = readout_system_prompt or READOUT_SYSTEM_PROMPT
+    finalizer_system_prompt = finalizer_system_prompt or FINALIZER_SYSTEM_PROMPT
     started = time.perf_counter()
     logger.write({"event": "run", "settings": asdict(settings), "random_seed": seed})
     generations: list[list[str]] = []
@@ -315,9 +321,9 @@ async def run_experiment(
     previous_generation: list[str] = []
 
     async def node_generator(node_index: int, prompt: str, samples: Sequence[str], generation: int) -> str:
-        response = await client.generate(NODE_SYSTEM_PROMPT, prompt, settings, settings.max_output_chars)
+        response = await client.generate(node_system_prompt, prompt, settings, settings.max_output_chars)
         if not response.content.strip():
-            response = await client.generate(NODE_SYSTEM_PROMPT, prompt, settings, settings.max_output_chars)
+            response = await client.generate(node_system_prompt, prompt, settings, settings.max_output_chars)
         return response.content
 
     for generation in range(1, settings.max_generations + 1):
@@ -350,7 +356,7 @@ async def run_experiment(
         if generation % settings.readout_interval == 0:
             recent = generations[-settings.readout_interval :]
             response = await client.generate(
-                READOUT_SYSTEM_PROMPT,
+                readout_system_prompt,
                 readout_prompt(original_prompt, recent),
                 observer_settings,
                 None,
@@ -371,7 +377,7 @@ async def run_experiment(
                 progress_callback(f"=== READOUT {generation - len(recent) + 1}-{generation} ===\n{readout}")
 
     final_response = await client.generate(
-        FINALIZER_SYSTEM_PROMPT,
+        finalizer_system_prompt,
         finalizer_prompt(original_prompt, readouts),
         observer_settings,
         None,

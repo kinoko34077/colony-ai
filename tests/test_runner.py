@@ -30,6 +30,28 @@ class MemoryLogger:
 
 
 class RunnerTests(unittest.TestCase):
+    def test_run_experiment_accepts_custom_system_prompts_for_all_stages(self):
+        from swarm.swarm import Settings, run_experiment
+
+        client = FakeClient()
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(
+                run_experiment(
+                    "問い",
+                    Settings(node_count=1, max_generations=1, readout_interval=1),
+                    client,
+                    Path(directory) / "run.jsonl",
+                    seed=1,
+                    node_system_prompt="NODE CUSTOM",
+                    readout_system_prompt="READOUT CUSTOM",
+                    finalizer_system_prompt="FINAL CUSTOM",
+                )
+            )
+
+        self.assertIn("NODE CUSTOM", [call[0] for call in client.calls])
+        self.assertIn("READOUT CUSTOM", [call[0] for call in client.calls])
+        self.assertIn("FINAL CUSTOM", [call[0] for call in client.calls])
+
     def test_run_experiment_emits_node_and_generation_events_during_execution(self):
         from swarm.swarm import Settings, run_experiment
 
