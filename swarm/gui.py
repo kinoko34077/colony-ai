@@ -29,11 +29,24 @@ def connection_status_text(info: dict[str, Any] | None = None, error: str | None
     return f"接続OK: Ollama {version}"
 
 
-def format_result(readouts: list[str], final_answer: str, log_path: str) -> str:
-    sections = [f"Readout #{index}\n{readout}" for index, readout in enumerate(readouts, 1)]
-    sections.append(f"=== FINAL ANSWER ===\n{final_answer}")
-    sections.append(f"Log: {log_path}")
+def format_generations(generations: list[list[str]]) -> str:
+    sections = []
+    for generation, outputs in enumerate(generations, 1):
+        values = "\n".join(f"{index}. {output or '(空)'}" for index, output in enumerate(outputs, 1))
+        sections.append(f"Generation {generation}\n{values}")
     return "\n\n".join(sections)
+
+
+def format_readouts(readouts: list[str]) -> str:
+    return "\n\n".join(f"Readout #{index}\n{readout}" for index, readout in enumerate(readouts, 1))
+
+
+def format_result(generations: list[list[str]], readouts: list[str], final_answer: str, log_path: str) -> dict[str, str]:
+    return {
+        "generations": format_generations(generations),
+        "readouts": format_readouts(readouts),
+        "final": f"{final_answer}\n\nLog: {log_path}",
+    }
 
 
 class SwarmGui:
@@ -55,7 +68,9 @@ class SwarmGui:
         }
         self.status_var = tk.StringVar(value="未接続")
         self.prompt = tk.Text(self.root, height=5, width=80)
-        self.output = tk.Text(self.root, height=18, width=80, state="disabled", wrap="word")
+        self.generation_output = tk.Text(self.root, height=18, width=42, state="disabled", wrap="word")
+        self.readout_output = tk.Text(self.root, height=18, width=42, state="disabled", wrap="word")
+        self.final_output = tk.Text(self.root, height=7, width=90, state="disabled", wrap="word")
         self.start_button = ttk.Button(self.root, text="実行", command=self.start)
         self.check_button = ttk.Button(self.root, text="接続確認", command=self.check_connection)
         self._build(ttk)
@@ -72,16 +87,22 @@ class SwarmGui:
         ttk.Label(self.root, textvariable=self.status_var).grid(row=3, column=3, columnspan=2, sticky="w", padx=8)
         self.check_button.grid(row=3, column=5, padx=8, pady=6)
         self.start_button.grid(row=4, column=5, padx=8, pady=6)
-        self.output.grid(row=5, column=0, columnspan=6, sticky="nsew", padx=8, pady=6)
+        ttk.Label(self.root, text="各世代の直接出力").grid(row=5, column=0, sticky="w", padx=8)
+        ttk.Label(self.root, text="5世代ごとの要約").grid(row=5, column=3, sticky="w", padx=8)
+        self.generation_output.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=8, pady=4)
+        self.readout_output.grid(row=6, column=3, columnspan=3, sticky="nsew", padx=8, pady=4)
+        ttk.Label(self.root, text="最終的な出力").grid(row=7, column=0, sticky="w", padx=8)
+        self.final_output.grid(row=8, column=0, columnspan=6, sticky="nsew", padx=8, pady=4)
         self.root.grid_columnconfigure(1, weight=1)
-        self.root.grid_rowconfigure(0, weight=0)
-        self.root.grid_rowconfigure(5, weight=1)
+        self.root.grid_columnconfigure(3, weight=1)
+        self.root.grid_rowconfigure(6, weight=1)
+        self.root.grid_rowconfigure(8, weight=1)
 
-    def _set_output(self, text: str) -> None:
-        self.output.configure(state="normal")
-        self.output.delete("1.0", "end")
-        self.output.insert("end", text)
-        self.output.configure(state="disabled")
+    def _set_text(self, widget, text: str) -> None:
+        widget.configure(state="normal")
+        widget.delete("1.0", "end")
+        widget.insert("end", text)
+        widget.configure(state="disabled")
 
     def check_connection(self) -> None:
         url = self.vars["ollama_url"].get().strip()
@@ -109,7 +130,9 @@ class SwarmGui:
         log_path = Path("logs") / ("gui-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".jsonl")
         self.start_button.configure(state="disabled")
         self.check_button.configure(state="disabled")
-        self._set_output("")
+        self._set_text(self.generation_output, "")
+        self._set_text(self.readout_output, "")
+        self._set_text(self.final_output, "")
 
         def worker() -> None:
             try:
@@ -131,7 +154,10 @@ class SwarmGui:
 
     def _finish(self, result: ExperimentResult, log_path: str) -> None:
         self.status_var.set("完了")
-        self._set_output(format_result(result.readouts, result.final_answer, log_path))
+        rendered = format_result(result.generations, result.readouts, result.final_answer, log_path)
+        self._set_text(self.generation_output, rendered["generations"])
+        self._set_text(self.readout_output, rendered["readouts"])
+        self._set_text(self.final_output, rendered["final"])
         self.start_button.configure(state="normal")
         self.check_button.configure(state="normal")
 

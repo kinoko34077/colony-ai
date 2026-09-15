@@ -47,7 +47,7 @@ Readout周期を短くして小規模 smoke を行う場合は `--readout-interv
 python -m swarm.gui
 ```
 
-GUIでは問い、世代数、ノード数、seed、モデル、Ollama URLを確認・変更できます。接続確認、実行中の世代表示、Readout、Finalizer結果、ログパスを表示します。実験本体はCLIと同じ関数を使用します。
+GUIでは問い、世代数、ノード数、seed、モデル、Ollama URLを確認・変更できます。画面は左に各世代の直接出力、右に5世代ごとのReadout、下にFinalizerの最終出力を表示します。実験本体はCLIと同じ関数を使用します。
 
 ## テスト
 
