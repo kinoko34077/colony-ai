@@ -2,6 +2,25 @@ import unittest
 
 
 class GuiHelperTests(unittest.TestCase):
+    def test_gui_can_set_readout_and_finalizer_character_limits(self):
+        from swarm.gui import settings_from_gui_values
+
+        settings, _ = settings_from_gui_values(
+            {
+                "model": "qwen3:0.6b",
+                "nodes": "5",
+                "generations": "2",
+                "readout_interval": "2",
+                "ollama_url": "http://localhost:11434",
+                "seed": "",
+                "readout_max_chars": "500",
+                "finalizer_max_chars": "1000",
+            }
+        )
+
+        self.assertEqual(settings.readout_max_chars, 500)
+        self.assertEqual(settings.finalizer_max_chars, 1000)
+
     def test_settings_from_gui_values_converts_text_fields(self):
         from swarm.gui import settings_from_gui_values
 

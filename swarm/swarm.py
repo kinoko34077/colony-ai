@@ -40,6 +40,8 @@ class Settings:
     think: bool = False
     keep_alive: int = -1
     ollama_url: str = "http://127.0.0.1:11434"
+    readout_max_chars: int | None = None
+    finalizer_max_chars: int | None = None
 
     def __post_init__(self) -> None:
         if self.node_count < 1:
@@ -52,6 +54,10 @@ class Settings:
             raise ValueError("sample range is invalid")
         if self.max_output_chars < 1:
             raise ValueError("max_output_chars must be positive")
+        if self.readout_max_chars is not None and self.readout_max_chars < 1:
+            raise ValueError("readout_max_chars must be positive when set")
+        if self.finalizer_max_chars is not None and self.finalizer_max_chars < 1:
+            raise ValueError("finalizer_max_chars must be positive when set")
 
 
 @dataclass(frozen=True)
@@ -236,7 +242,7 @@ class OllamaClient:
         message = response.get("message") or {}
         content = message.get("content", "")
         if max_chars is not None:
-            content = normalize_output(content, max_chars)
+            content = content.strip()[:max_chars]
         metadata = {
             key: response[key]
             for key in ("total_duration", "load_duration", "prompt_eval_count", "eval_count")
@@ -359,7 +365,7 @@ async def run_experiment(
                 readout_system_prompt,
                 readout_prompt(original_prompt, recent),
                 observer_settings,
-                None,
+                settings.readout_max_chars,
             )
             readout = response.content.strip()
             readouts.append(readout)
@@ -380,7 +386,7 @@ async def run_experiment(
         finalizer_system_prompt,
         finalizer_prompt(original_prompt, readouts),
         observer_settings,
-        None,
+        settings.finalizer_max_chars,
     )
     final_answer = final_response.content.strip()
     finalizer_event = {"event": "finalizer", "final_answer": final_answer, "metadata": final_response.metadata}

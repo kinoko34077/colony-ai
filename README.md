@@ -49,6 +49,8 @@ python -m swarm.gui
 
 GUIでは問い、世代数、ノード数、seed、モデル、Ollama URLを確認・変更できます。画面は左に各世代内の各ノードの直接出力、右に5世代ごとのReadout、下にFinalizerの最終出力を表示します。実験本体はCLIと同じ関数を使用します。
 
+システムプロンプトはGUI上部の「ノード」「Readout」「Finalizer」タブで個別に編集できます。Readout文字数上限とFinalizer文字数上限も指定できます。空欄なら文字数での追加制限はなく、Ollamaの `num_predict=24` は共通で適用されます。
+
 ## テスト
 
 Ollamaを呼ばないunit test:

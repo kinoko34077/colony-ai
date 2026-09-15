@@ -20,12 +20,16 @@ from .swarm import (
 def settings_from_gui_values(values: dict[str, str]) -> tuple[Settings, int | None]:
     seed_text = values.get("seed", "").strip()
     seed = int(seed_text) if seed_text else None
+    readout_limit = values.get("readout_max_chars", "").strip()
+    finalizer_limit = values.get("finalizer_max_chars", "").strip()
     settings = Settings(
         model=values["model"].strip() or "qwen3:0.6b",
         node_count=int(values["nodes"]),
         max_generations=int(values["generations"]),
         readout_interval=int(values["readout_interval"]),
         ollama_url=values["ollama_url"].strip() or "http://127.0.0.1:11434",
+        readout_max_chars=int(readout_limit) if readout_limit else None,
+        finalizer_max_chars=int(finalizer_limit) if finalizer_limit else None,
     )
     return settings, seed
 
@@ -65,7 +69,7 @@ class SwarmGui:
         self.tk = tk
         self.root = root or tk.Tk()
         self.root.title("colony-ai")
-        self.root.geometry("700x560")
+        self.root.geometry("760x680")
         self.vars = {
             "model": tk.StringVar(value="qwen3:0.6b"),
             "nodes": tk.StringVar(value="100"),
@@ -73,6 +77,8 @@ class SwarmGui:
             "readout_interval": tk.StringVar(value="5"),
             "ollama_url": tk.StringVar(value="http://127.0.0.1:11434"),
             "seed": tk.StringVar(value=""),
+            "readout_max_chars": tk.StringVar(value=""),
+            "finalizer_max_chars": tk.StringVar(value=""),
         }
         self.status_var = tk.StringVar(value="未接続")
         self.prompt = tk.Text(self.root, height=5, width=80)
@@ -106,13 +112,18 @@ class SwarmGui:
         for column, (key, label) in enumerate(labels):
             ttk.Label(self.root, text=label).grid(row=2, column=column, sticky="w", padx=8)
             ttk.Entry(self.root, textvariable=self.vars[key], width=16).grid(row=3, column=column, padx=8, pady=4)
-        ttk.Label(self.root, text="Ollama URL").grid(row=4, column=0, sticky="w", padx=8)
-        ttk.Entry(self.root, textvariable=self.vars["ollama_url"], width=32).grid(row=4, column=1, columnspan=2, sticky="w", padx=8)
-        ttk.Label(self.root, textvariable=self.status_var).grid(row=4, column=3, sticky="w", padx=8)
-        self.check_button.grid(row=4, column=5, padx=8, pady=6)
-        self.start_button.grid(row=4, column=4, padx=8, pady=6)
-        ttk.Label(self.root, text="各ノードの直接出力").grid(row=5, column=0, columnspan=3, sticky="w", padx=8)
-        ttk.Label(self.root, text="5世代ごとの要約").grid(row=5, column=3, columnspan=3, sticky="w", padx=8)
+        ttk.Label(self.root, text="Readout文字数上限").grid(row=4, column=0, sticky="w", padx=8)
+        ttk.Entry(self.root, textvariable=self.vars["readout_max_chars"], width=12).grid(row=4, column=1, padx=8)
+        ttk.Label(self.root, text="Finalizer文字数上限").grid(row=4, column=2, sticky="w", padx=8)
+        ttk.Entry(self.root, textvariable=self.vars["finalizer_max_chars"], width=12).grid(row=4, column=3, padx=8)
+        ttk.Label(self.root, text="空欄=制限なし").grid(row=4, column=4, sticky="w", padx=8)
+        ttk.Label(self.root, text="Ollama URL").grid(row=5, column=0, sticky="w", padx=8)
+        ttk.Entry(self.root, textvariable=self.vars["ollama_url"], width=32).grid(row=5, column=1, columnspan=2, sticky="w", padx=8)
+        ttk.Label(self.root, textvariable=self.status_var).grid(row=5, column=3, sticky="w", padx=8)
+        self.check_button.grid(row=5, column=5, padx=8, pady=6)
+        self.start_button.grid(row=5, column=4, padx=8, pady=6)
+        ttk.Label(self.root, text="各ノードの直接出力").grid(row=6, column=0, columnspan=3, sticky="w", padx=8)
+        ttk.Label(self.root, text="5世代ごとの要約").grid(row=6, column=3, columnspan=3, sticky="w", padx=8)
         generation_frame = ttk.Frame(self.root)
         readout_frame = ttk.Frame(self.root)
         generation_scroll = ttk.Scrollbar(generation_frame, command=self.generation_output.yview)
@@ -126,21 +137,21 @@ class SwarmGui:
         for frame in (generation_frame, readout_frame):
             frame.grid_columnconfigure(0, weight=1)
             frame.grid_rowconfigure(0, weight=1)
-        generation_frame.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=8, pady=4)
-        readout_frame.grid(row=6, column=3, columnspan=3, sticky="nsew", padx=8, pady=4)
-        ttk.Label(self.root, text="最終的な出力").grid(row=7, column=0, columnspan=6, sticky="w", padx=8)
+        generation_frame.grid(row=7, column=0, columnspan=3, sticky="nsew", padx=8, pady=4)
+        readout_frame.grid(row=7, column=3, columnspan=3, sticky="nsew", padx=8, pady=4)
+        ttk.Label(self.root, text="最終的な出力").grid(row=8, column=0, columnspan=6, sticky="w", padx=8)
         final_frame = ttk.Frame(self.root)
         final_scroll = ttk.Scrollbar(final_frame, command=self.final_output.yview)
         self.final_output.configure(yscrollcommand=final_scroll.set)
         self.final_output.grid(row=0, column=0, sticky="nsew")
         final_scroll.grid(row=0, column=1, sticky="ns")
-        final_frame.grid(row=8, column=0, columnspan=6, sticky="nsew", padx=8, pady=4)
+        final_frame.grid(row=9, column=0, columnspan=6, sticky="nsew", padx=8, pady=4)
         final_frame.grid_columnconfigure(0, weight=1)
         final_frame.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(1, weight=1)
         self.root.grid_columnconfigure(3, weight=1)
-        self.root.grid_rowconfigure(6, weight=1)
-        self.root.grid_rowconfigure(8, weight=1)
+        self.root.grid_rowconfigure(7, weight=1)
+        self.root.grid_rowconfigure(9, weight=1)
 
     def _set_text(self, widget, text: str) -> None:
         widget.configure(state="normal")
