@@ -11,6 +11,8 @@ class CliTests(unittest.TestCase):
                 "問い",
                 "--generations",
                 "3",
+                "--readout-interval",
+                "2",
                 "--nodes",
                 "7",
                 "--seed",
@@ -24,6 +26,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(args.prompt, "問い")
         self.assertEqual(args.generations, 3)
+        self.assertEqual(args.readout_interval, 2)
         self.assertEqual(args.nodes, 7)
         self.assertEqual(args.seed, 12)
         self.assertEqual(args.log, "logs/example.jsonl")

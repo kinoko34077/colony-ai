@@ -1,6 +1,7 @@
 import asyncio
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -29,6 +30,58 @@ class MemoryLogger:
 
 
 class RunnerTests(unittest.TestCase):
+    def test_observer_calls_use_context_large_enough_for_a_full_generation(self):
+        from swarm.swarm import Settings, run_experiment
+
+        class ContextRecordingClient(FakeClient):
+            def __init__(self):
+                super().__init__()
+                self.observer_contexts = []
+
+            async def generate(self, system_prompt, user_prompt, settings, max_chars=None):
+                if "直近5世代分" in system_prompt or "観測記録全体" in system_prompt:
+                    self.observer_contexts.append(settings.num_ctx)
+                return await super().generate(system_prompt, user_prompt, settings, max_chars)
+
+        client = ContextRecordingClient()
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(
+                run_experiment(
+                    "問い",
+                    Settings(node_count=100, max_generations=1, readout_interval=1),
+                    client,
+                    Path(directory) / "run.jsonl",
+                    seed=2,
+                )
+            )
+
+        self.assertEqual(client.observer_contexts, [8192, 8192])
+
+    def test_ollama_client_limits_physical_requests_while_nodes_remain_logically_async(self):
+        from swarm.swarm import OllamaClient, Settings
+
+        class CountingClient(OllamaClient):
+            def __init__(self):
+                super().__init__(max_concurrency=1)
+                self.active = 0
+                self.maximum_active = 0
+
+            def _request_json(self, method, path, payload):
+                self.active += 1
+                self.maximum_active = max(self.maximum_active, self.active)
+                time.sleep(0.02)
+                self.active -= 1
+                return {"message": {"content": "短文"}}
+
+        async def exercise(client):
+            settings = Settings(node_count=1)
+            await asyncio.gather(*(client.generate("system", "user", settings) for _ in range(3)))
+
+        client = CountingClient()
+        asyncio.run(exercise(client))
+
+        self.assertEqual(client.maximum_active, 1)
+
     def test_run_experiment_transitions_generations_and_keeps_readout_out_of_node_prompts(self):
         from swarm.swarm import Settings, run_experiment
 

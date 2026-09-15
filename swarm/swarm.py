@@ -10,7 +10,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -198,8 +198,11 @@ class JsonlLogger:
 class OllamaClient:
     """Small async wrapper around Ollama's local chat API."""
 
-    def __init__(self, base_url: str = "http://127.0.0.1:11434"):
+    def __init__(self, base_url: str = "http://127.0.0.1:11434", max_concurrency: int = 1):
+        if max_concurrency < 1:
+            raise ValueError("max_concurrency must be positive")
         self.base_url = base_url.rstrip("/")
+        self._semaphore = asyncio.Semaphore(max_concurrency)
 
     async def check_connection(self) -> dict[str, Any]:
         return await asyncio.to_thread(self._request_json, "GET", "/api/version", None)
@@ -226,7 +229,8 @@ class OllamaClient:
                 "num_ctx": settings.num_ctx,
             },
         }
-        response = await asyncio.to_thread(self._request_json, "POST", "/api/chat", payload)
+        async with self._semaphore:
+            response = await asyncio.to_thread(self._request_json, "POST", "/api/chat", payload)
         message = response.get("message") or {}
         content = message.get("content", "")
         if max_chars is not None:
@@ -299,6 +303,7 @@ async def run_experiment(
         raise ValueError("original_prompt must not be empty")
     logger = JsonlLogger(log_path)
     rng = random.Random(seed)
+    observer_settings = replace(settings, num_ctx=max(settings.num_ctx, 8192))
     started = time.perf_counter()
     logger.write({"event": "run", "settings": asdict(settings), "random_seed": seed})
     generations: list[list[str]] = []
@@ -335,7 +340,7 @@ async def run_experiment(
             response = await client.generate(
                 READOUT_SYSTEM_PROMPT,
                 readout_prompt(original_prompt, recent),
-                settings,
+                observer_settings,
                 None,
             )
             readout = response.content.strip()
@@ -355,7 +360,7 @@ async def run_experiment(
     final_response = await client.generate(
         FINALIZER_SYSTEM_PROMPT,
         finalizer_prompt(original_prompt, readouts),
-        settings,
+        observer_settings,
         None,
     )
     final_answer = final_response.content.strip()
@@ -377,6 +382,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-file", help="UTF-8 file containing the original question")
     parser.add_argument("--generations", type=int, default=100)
     parser.add_argument("--nodes", type=int, default=100)
+    parser.add_argument("--readout-interval", type=int, default=5)
     parser.add_argument("--seed", type=int)
     parser.add_argument("--log", default=None, help="JSONL log path")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
@@ -407,6 +413,7 @@ async def _run_cli(args: argparse.Namespace, prompt: str) -> int:
     settings = Settings(
         node_count=args.nodes,
         max_generations=args.generations,
+        readout_interval=args.readout_interval,
         ollama_url=args.ollama_url,
     )
     log_path = Path(args.log) if args.log else Path("logs") / (

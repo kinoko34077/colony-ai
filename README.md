@@ -37,6 +37,8 @@ python -m swarm.swarm --prompt "ここに問い" --generations 100 --nodes 100 -
 python -m swarm.swarm --prompt-file .\question.txt --generations 10 --nodes 100
 ```
 
+Readout周期を短くして小規模 smoke を行う場合は `--readout-interval 2` のように指定できます。
+
 実行中は世代進行と5世代ごとのReadoutを表示し、生ノード出力は `logs/*.jsonl` に保存します。JSONLには設定、ノードのサンプル・raw/normalized出力、Readout、Finalizer、経過時間を記録します。
 
 ## 最小GUI
@@ -60,6 +62,16 @@ python -m unittest discover -v
 ```powershell
 .\scripts\smoke_ollama.ps1
 ```
+
+## 実測済み確認
+
+2026-09-15 にローカル Ollama `0.33.3` / `qwen3:0.6b` で確認しました。
+
+- 5ノード × 2世代、Readout周期2: 約3.94秒。node 10件、Readout 1件、Finalizer 1件。
+- 100ノード × 1世代、Readout周期1: 約31.55秒。node 100件、エラー0件、Readout 1件、Finalizer 1件。
+- いずれも `think=false`。ノード正規化出力の最大長は30文字。
+
+100ノードの全断片をReadoutへ渡すと初期値の `num_ctx=2048` を超えるため、ノード生成は2048のまま、ReadoutとFinalizerだけ観測用 `num_ctx=8192` を使用します。Ollamaへの物理HTTPリクエストは既定1本ずつですが、ノードは論理的にasyncで生成します。
 
 ## v0.1の境界
 
