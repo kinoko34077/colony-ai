@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import argparse
 import json
 import inspect
 import random
 import re
+import sys
 import time
 import urllib.error
 import urllib.request
 from dataclasses import asdict
 from pathlib import Path
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Awaitable, Callable, Protocol, Sequence
 
 
@@ -366,3 +369,67 @@ async def run_experiment(
     }
     logger.write({"event": "complete", "timings": timings})
     return ExperimentResult(generations, readouts, final_answer, timings)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Synchronized recursive LLM swarm using local Ollama")
+    parser.add_argument("--prompt", help="original question")
+    parser.add_argument("--prompt-file", help="UTF-8 file containing the original question")
+    parser.add_argument("--generations", type=int, default=100)
+    parser.add_argument("--nodes", type=int, default=100)
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--log", default=None, help="JSONL log path")
+    parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    return parser
+
+
+def _prompt_from_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> str:
+    if args.prompt and args.prompt_file:
+        parser.error("--prompt and --prompt-file cannot be used together")
+    if args.prompt_file:
+        try:
+            prompt = Path(args.prompt_file).read_text(encoding="utf-8")
+        except OSError as exc:
+            parser.error(f"cannot read --prompt-file: {exc}")
+    elif args.prompt:
+        prompt = args.prompt
+    else:
+        parser.error("one of --prompt or --prompt-file is required")
+    if not prompt.strip():
+        parser.error("prompt must not be empty")
+    return prompt
+
+
+async def _run_cli(args: argparse.Namespace, prompt: str) -> int:
+    client = OllamaClient(args.ollama_url)
+    connection = await client.check_connection()
+    print(f"Ollama: {connection.get('version', 'connected')}")
+    settings = Settings(
+        node_count=args.nodes,
+        max_generations=args.generations,
+        ollama_url=args.ollama_url,
+    )
+    log_path = Path(args.log) if args.log else Path("logs") / (
+        "swarm-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".jsonl"
+    )
+    result = await run_experiment(prompt, settings, client, log_path, seed=args.seed, progress_callback=print)
+    print(f"Log: {log_path}")
+    print("=== FINAL ANSWER ===")
+    print(result.final_answer)
+    print(f"Elapsed: {result.timings['total_elapsed_seconds']:.2f}s")
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    prompt = _prompt_from_args(parser, args)
+    try:
+        return asyncio.run(_run_cli(args, prompt))
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
