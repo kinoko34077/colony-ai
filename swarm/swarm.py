@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import inspect
 import random
 import re
+import time
+import urllib.error
+import urllib.request
+from dataclasses import asdict
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Protocol, Sequence
 
@@ -61,6 +67,23 @@ class EventLogger(Protocol):
 
 
 NodeGenerator = Callable[[int, str, Sequence[str], int], Awaitable[str] | str]
+
+
+@dataclass(frozen=True)
+class GenerationResponse:
+    content: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class GeneratorClient(Protocol):
+    async def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        settings: Settings,
+        max_chars: int | None = None,
+    ) -> GenerationResponse:
+        ...
 
 
 def sample_previous(
@@ -155,3 +178,191 @@ async def run_generation(
         return result
 
     return await asyncio.gather(*(run_node(index) for index in range(settings.node_count)))
+
+
+class JsonlLogger:
+    """Append-only experiment event logger."""
+
+    def __init__(self, path: Path):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def write(self, event: dict[str, Any]) -> None:
+        with self.path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
+class OllamaClient:
+    """Small async wrapper around Ollama's local chat API."""
+
+    def __init__(self, base_url: str = "http://127.0.0.1:11434"):
+        self.base_url = base_url.rstrip("/")
+
+    async def check_connection(self) -> dict[str, Any]:
+        return await asyncio.to_thread(self._request_json, "GET", "/api/version", None)
+
+    async def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        settings: Settings,
+        max_chars: int | None = None,
+    ) -> GenerationResponse:
+        payload = {
+            "model": settings.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "stream": False,
+            "think": settings.think,
+            "keep_alive": settings.keep_alive,
+            "options": {
+                "temperature": settings.temperature,
+                "num_predict": settings.num_predict,
+                "num_ctx": settings.num_ctx,
+            },
+        }
+        response = await asyncio.to_thread(self._request_json, "POST", "/api/chat", payload)
+        message = response.get("message") or {}
+        content = message.get("content", "")
+        if max_chars is not None:
+            content = normalize_output(content, max_chars)
+        metadata = {
+            key: response[key]
+            for key in ("total_duration", "load_duration", "prompt_eval_count", "eval_count")
+            if key in response
+        }
+        return GenerationResponse(content=content, metadata=metadata)
+
+    def _request_json(self, method: str, path: str, payload: dict[str, Any] | None) -> dict[str, Any]:
+        body = None if payload is None else json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self.base_url + path,
+            data=body,
+            method=method,
+            headers={"Content-Type": "application/json"} if body is not None else {},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Ollama HTTP {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Ollama connection failed: {exc.reason}") from exc
+
+
+@dataclass
+class ExperimentResult:
+    generations: list[list[str]]
+    readouts: list[str]
+    final_answer: str
+    timings: dict[str, Any]
+
+
+def readout_prompt(original_prompt: str, recent_generations: Sequence[Sequence[str]]) -> str:
+    sections = [f"Generation {index}:\n" + "\n".join(values) for index, values in enumerate(recent_generations, 1)]
+    return "【元の問い】\n" + original_prompt + "\n\n" + "\n\n".join(sections)
+
+
+def finalizer_prompt(original_prompt: str, readouts: Sequence[str]) -> str:
+    records = "\n\n".join(f"Readout #{index}\n{value}" for index, value in enumerate(readouts, 1))
+    return "【元の問い】\n" + original_prompt + "\n\n【観測記録】\n" + records
+
+
+READOUT_SYSTEM_PROMPT = """以下は同じ問いについて生成された群体AIの直近5世代分の出力である。
+
+この5世代で現れている主要な思考内容、変化、現在残っている有力な考えを簡潔にまとめよ。
+
+新しい推論を追加せず、与えられた内容の観測・要約に限定せよ。"""
+
+FINALIZER_SYSTEM_PROMPT = """以下は一つの問いについて継続的に行われた群体推論の観測記録である。
+
+観測記録全体を踏まえて、元の問いへの最終的な回答を構成せよ。
+途中経過を単に列挙するのではなく、最終的に成立している内容を統合して答えよ。"""
+
+
+async def run_experiment(
+    original_prompt: str,
+    settings: Settings,
+    client: GeneratorClient,
+    log_path: Path,
+    seed: int | None = None,
+    progress_callback: Callable[[str], None] | None = None,
+) -> ExperimentResult:
+    """Run synchronized generations, readouts, and the final synthesis."""
+    if not original_prompt.strip():
+        raise ValueError("original_prompt must not be empty")
+    logger = JsonlLogger(log_path)
+    rng = random.Random(seed)
+    started = time.perf_counter()
+    logger.write({"event": "run", "settings": asdict(settings), "random_seed": seed})
+    generations: list[list[str]] = []
+    readouts: list[str] = []
+    generation_elapsed: list[float] = []
+    previous_generation: list[str] = []
+
+    async def node_generator(node_index: int, prompt: str, samples: Sequence[str], generation: int) -> str:
+        response = await client.generate(NODE_SYSTEM_PROMPT, prompt, settings, settings.max_output_chars)
+        if not response.content.strip():
+            response = await client.generate(NODE_SYSTEM_PROMPT, prompt, settings, settings.max_output_chars)
+        return response.content
+
+    for generation in range(1, settings.max_generations + 1):
+        if progress_callback is not None:
+            progress_callback(f"Generation {generation}/{settings.max_generations}")
+        generation_started = time.perf_counter()
+        results = await run_generation(
+            original_prompt,
+            tuple(previous_generation),
+            settings,
+            node_generator,
+            rng,
+            generation,
+            logger,
+        )
+        current_generation = [result.normalized_output for result in results]
+        generations.append(current_generation)
+        previous_generation = list(current_generation)
+        elapsed = time.perf_counter() - generation_started
+        generation_elapsed.append(elapsed)
+        if generation % settings.readout_interval == 0:
+            recent = generations[-settings.readout_interval :]
+            response = await client.generate(
+                READOUT_SYSTEM_PROMPT,
+                readout_prompt(original_prompt, recent),
+                settings,
+                None,
+            )
+            readout = response.content.strip()
+            readouts.append(readout)
+            logger.write(
+                {
+                    "event": "readout",
+                    "generation_start": generation - len(recent) + 1,
+                    "generation_end": generation,
+                    "readout": readout,
+                    "metadata": response.metadata,
+                }
+            )
+            if progress_callback is not None:
+                progress_callback(f"=== READOUT {generation - len(recent) + 1}-{generation} ===\n{readout}")
+
+    final_response = await client.generate(
+        FINALIZER_SYSTEM_PROMPT,
+        finalizer_prompt(original_prompt, readouts),
+        settings,
+        None,
+    )
+    final_answer = final_response.content.strip()
+    logger.write({"event": "finalizer", "final_answer": final_answer, "metadata": final_response.metadata})
+    timings = {
+        "total_elapsed_seconds": time.perf_counter() - started,
+        "generation_elapsed_seconds": generation_elapsed,
+        "node_count": settings.node_count,
+        "generation_count": settings.max_generations,
+        "model": settings.model,
+    }
+    logger.write({"event": "complete", "timings": timings})
+    return ExperimentResult(generations, readouts, final_answer, timings)
