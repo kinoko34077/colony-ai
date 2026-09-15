@@ -137,6 +137,7 @@ async def run_generation(
     rng: random.Random,
     generation: int,
     logger: EventLogger | None = None,
+    event_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[NodeResult]:
     """Generate one synchronized generation from an immutable prior snapshot."""
     previous_snapshot = tuple(previous_generation)
@@ -166,18 +167,19 @@ async def run_generation(
             normalized_output=normalize_output(raw_output, settings.max_output_chars),
             error=error,
         )
+        event = {
+            "event": "node",
+            "generation": generation,
+            "node_index": node_index,
+            "sampled_previous_outputs": list(samples),
+            "raw_output": result.raw_output,
+            "normalized_output": result.normalized_output,
+            "error": result.error,
+        }
         if logger is not None:
-            logger.write(
-                {
-                    "event": "node",
-                    "generation": generation,
-                    "node_index": node_index,
-                    "sampled_previous_outputs": list(samples),
-                    "raw_output": result.raw_output,
-                    "normalized_output": result.normalized_output,
-                    "error": result.error,
-                }
-            )
+            logger.write(event)
+        if event_callback is not None:
+            event_callback(event)
         return result
 
     return await asyncio.gather(*(run_node(index) for index in range(settings.node_count)))
@@ -297,6 +299,7 @@ async def run_experiment(
     log_path: Path,
     seed: int | None = None,
     progress_callback: Callable[[str], None] | None = None,
+    event_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> ExperimentResult:
     """Run synchronized generations, readouts, and the final synthesis."""
     if not original_prompt.strip():
@@ -329,12 +332,21 @@ async def run_experiment(
             rng,
             generation,
             logger,
+            event_callback,
         )
         current_generation = [result.normalized_output for result in results]
         generations.append(current_generation)
         previous_generation = list(current_generation)
         elapsed = time.perf_counter() - generation_started
         generation_elapsed.append(elapsed)
+        generation_event = {
+            "event": "generation",
+            "generation": generation,
+            "outputs": list(current_generation),
+            "elapsed_seconds": elapsed,
+        }
+        if event_callback is not None:
+            event_callback(generation_event)
         if generation % settings.readout_interval == 0:
             recent = generations[-settings.readout_interval :]
             response = await client.generate(
@@ -345,15 +357,16 @@ async def run_experiment(
             )
             readout = response.content.strip()
             readouts.append(readout)
-            logger.write(
-                {
-                    "event": "readout",
-                    "generation_start": generation - len(recent) + 1,
-                    "generation_end": generation,
-                    "readout": readout,
-                    "metadata": response.metadata,
-                }
-            )
+            readout_event = {
+                "event": "readout",
+                "generation_start": generation - len(recent) + 1,
+                "generation_end": generation,
+                "readout": readout,
+                "metadata": response.metadata,
+            }
+            logger.write(readout_event)
+            if event_callback is not None:
+                event_callback(readout_event)
             if progress_callback is not None:
                 progress_callback(f"=== READOUT {generation - len(recent) + 1}-{generation} ===\n{readout}")
 
@@ -364,7 +377,10 @@ async def run_experiment(
         None,
     )
     final_answer = final_response.content.strip()
-    logger.write({"event": "finalizer", "final_answer": final_answer, "metadata": final_response.metadata})
+    finalizer_event = {"event": "finalizer", "final_answer": final_answer, "metadata": final_response.metadata}
+    logger.write(finalizer_event)
+    if event_callback is not None:
+        event_callback(finalizer_event)
     timings = {
         "total_elapsed_seconds": time.perf_counter() - started,
         "generation_elapsed_seconds": generation_elapsed,

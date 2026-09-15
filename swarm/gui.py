@@ -73,6 +73,8 @@ class SwarmGui:
         self.final_output = tk.Text(self.root, height=7, width=90, state="disabled", wrap="word")
         self.start_button = ttk.Button(self.root, text="実行", command=self.start)
         self.check_button = ttk.Button(self.root, text="接続確認", command=self.check_connection)
+        self.live_generations: dict[int, dict[int, str]] = {}
+        self.live_readouts: list[str] = []
         self._build(ttk)
 
     def _build(self, ttk) -> None:
@@ -130,6 +132,8 @@ class SwarmGui:
         log_path = Path("logs") / ("gui-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".jsonl")
         self.start_button.configure(state="disabled")
         self.check_button.configure(state="disabled")
+        self.live_generations = {}
+        self.live_readouts = []
         self._set_text(self.generation_output, "")
         self._set_text(self.readout_output, "")
         self._set_text(self.final_output, "")
@@ -144,6 +148,7 @@ class SwarmGui:
                         log_path,
                         seed=seed,
                         progress_callback=lambda message: self.root.after(0, self.status_var.set, message),
+                        event_callback=lambda event: self.root.after(0, self._handle_event, event),
                     )
                 )
                 self.root.after(0, self._finish, result, str(log_path))
@@ -151,6 +156,23 @@ class SwarmGui:
                 self.root.after(0, self._fail, str(exc))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _handle_event(self, event: dict[str, Any]) -> None:
+        event_type = event.get("event")
+        if event_type == "node":
+            generation = int(event["generation"])
+            node_index = int(event["node_index"])
+            self.live_generations.setdefault(generation, {})[node_index] = event.get("normalized_output", "")
+            generations = []
+            for number in sorted(self.live_generations):
+                nodes = self.live_generations[number]
+                generations.append([nodes[index] for index in sorted(nodes)])
+            self._set_text(self.generation_output, format_generations(generations))
+        elif event_type == "readout":
+            self.live_readouts.append(event.get("readout", ""))
+            self._set_text(self.readout_output, format_readouts(self.live_readouts))
+        elif event_type == "finalizer":
+            self._set_text(self.final_output, event.get("final_answer", ""))
 
     def _finish(self, result: ExperimentResult, log_path: str) -> None:
         self.status_var.set("完了")

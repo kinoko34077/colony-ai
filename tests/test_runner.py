@@ -30,6 +30,27 @@ class MemoryLogger:
 
 
 class RunnerTests(unittest.TestCase):
+    def test_run_experiment_emits_node_and_generation_events_during_execution(self):
+        from swarm.swarm import Settings, run_experiment
+
+        events = []
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(
+                run_experiment(
+                    "問い",
+                    Settings(node_count=2, max_generations=2, readout_interval=2),
+                    FakeClient(),
+                    Path(directory) / "run.jsonl",
+                    seed=4,
+                    event_callback=events.append,
+                )
+            )
+
+        self.assertEqual(len([event for event in events if event["event"] == "node"]), 4)
+        self.assertEqual(len([event for event in events if event["event"] == "generation"]), 2)
+        self.assertEqual(events[-1]["event"], "finalizer")
+        self.assertLess(events.index(next(event for event in events if event["event"] == "node")), events.index(next(event for event in events if event["event"] == "generation")))
+
     def test_observer_calls_use_context_large_enough_for_a_full_generation(self):
         from swarm.swarm import Settings, run_experiment
 
