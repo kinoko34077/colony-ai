@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import asyncio
+import threading
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from .swarm import ExperimentResult, OllamaClient, Settings, run_experiment
+
+
+def settings_from_gui_values(values: dict[str, str]) -> tuple[Settings, int | None]:
+    seed_text = values.get("seed", "").strip()
+    seed = int(seed_text) if seed_text else None
+    settings = Settings(
+        model=values["model"].strip() or "qwen3:0.6b",
+        node_count=int(values["nodes"]),
+        max_generations=int(values["generations"]),
+        readout_interval=int(values["readout_interval"]),
+        ollama_url=values["ollama_url"].strip() or "http://127.0.0.1:11434",
+    )
+    return settings, seed
+
+
+def connection_status_text(info: dict[str, Any] | None = None, error: str | None = None) -> str:
+    if error:
+        return f"接続失敗: {error}"
+    version = (info or {}).get("version", "connected")
+    return f"接続OK: Ollama {version}"
+
+
+def format_result(readouts: list[str], final_answer: str, log_path: str) -> str:
+    sections = [f"Readout #{index}\n{readout}" for index, readout in enumerate(readouts, 1)]
+    sections.append(f"=== FINAL ANSWER ===\n{final_answer}")
+    sections.append(f"Log: {log_path}")
+    return "\n\n".join(sections)
+
+
+class SwarmGui:
+    def __init__(self, root=None):
+        import tkinter as tk
+        from tkinter import ttk
+
+        self.tk = tk
+        self.root = root or tk.Tk()
+        self.root.title("colony-ai")
+        self.root.geometry("700x560")
+        self.vars = {
+            "model": tk.StringVar(value="qwen3:0.6b"),
+            "nodes": tk.StringVar(value="100"),
+            "generations": tk.StringVar(value="100"),
+            "readout_interval": tk.StringVar(value="5"),
+            "ollama_url": tk.StringVar(value="http://127.0.0.1:11434"),
+            "seed": tk.StringVar(value=""),
+        }
+        self.status_var = tk.StringVar(value="未接続")
+        self.prompt = tk.Text(self.root, height=5, width=80)
+        self.output = tk.Text(self.root, height=18, width=80, state="disabled", wrap="word")
+        self.start_button = ttk.Button(self.root, text="実行", command=self.start)
+        self.check_button = ttk.Button(self.root, text="接続確認", command=self.check_connection)
+        self._build(ttk)
+
+    def _build(self, ttk) -> None:
+        ttk.Label(self.root, text="元の問い").grid(row=0, column=0, sticky="nw", padx=8, pady=6)
+        self.prompt.grid(row=0, column=1, columnspan=5, sticky="nsew", padx=8, pady=6)
+        labels = [("model", "モデル"), ("nodes", "ノード"), ("generations", "世代"), ("readout_interval", "Readout周期"), ("seed", "seed")]
+        for column, (key, label) in enumerate(labels):
+            ttk.Label(self.root, text=label).grid(row=1, column=column, sticky="w", padx=8)
+            ttk.Entry(self.root, textvariable=self.vars[key], width=16).grid(row=2, column=column, padx=8, pady=4)
+        ttk.Label(self.root, text="Ollama URL").grid(row=3, column=0, sticky="w", padx=8)
+        ttk.Entry(self.root, textvariable=self.vars["ollama_url"], width=32).grid(row=3, column=1, columnspan=2, sticky="w", padx=8)
+        ttk.Label(self.root, textvariable=self.status_var).grid(row=3, column=3, columnspan=2, sticky="w", padx=8)
+        self.check_button.grid(row=3, column=5, padx=8, pady=6)
+        self.start_button.grid(row=4, column=5, padx=8, pady=6)
+        self.output.grid(row=5, column=0, columnspan=6, sticky="nsew", padx=8, pady=6)
+        self.root.grid_columnconfigure(1, weight=1)
+        self.root.grid_rowconfigure(0, weight=0)
+        self.root.grid_rowconfigure(5, weight=1)
+
+    def _set_output(self, text: str) -> None:
+        self.output.configure(state="normal")
+        self.output.delete("1.0", "end")
+        self.output.insert("end", text)
+        self.output.configure(state="disabled")
+
+    def check_connection(self) -> None:
+        url = self.vars["ollama_url"].get().strip()
+        self.status_var.set("接続確認中...")
+
+        def worker() -> None:
+            try:
+                info = asyncio.run(OllamaClient(url).check_connection())
+                self.root.after(0, self.status_var.set, connection_status_text(info))
+            except Exception as exc:
+                self.root.after(0, self.status_var.set, connection_status_text(error=str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def start(self) -> None:
+        try:
+            values = {key: variable.get() for key, variable in self.vars.items()}
+            settings, seed = settings_from_gui_values(values)
+            prompt = self.prompt.get("1.0", "end").strip()
+            if not prompt:
+                raise ValueError("元の問いを入力してください")
+        except (KeyError, ValueError) as exc:
+            self.status_var.set(f"入力エラー: {exc}")
+            return
+        log_path = Path("logs") / ("gui-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".jsonl")
+        self.start_button.configure(state="disabled")
+        self.check_button.configure(state="disabled")
+        self._set_output("")
+
+        def worker() -> None:
+            try:
+                result = asyncio.run(
+                    run_experiment(
+                        prompt,
+                        settings,
+                        OllamaClient(settings.ollama_url),
+                        log_path,
+                        seed=seed,
+                        progress_callback=lambda message: self.root.after(0, self.status_var.set, message),
+                    )
+                )
+                self.root.after(0, self._finish, result, str(log_path))
+            except Exception as exc:
+                self.root.after(0, self._fail, str(exc))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish(self, result: ExperimentResult, log_path: str) -> None:
+        self.status_var.set("完了")
+        self._set_output(format_result(result.readouts, result.final_answer, log_path))
+        self.start_button.configure(state="normal")
+        self.check_button.configure(state="normal")
+
+    def _fail(self, message: str) -> None:
+        self.status_var.set(f"実行失敗: {message}")
+        self.start_button.configure(state="normal")
+        self.check_button.configure(state="normal")
+
+
+def main() -> int:
+    app = SwarmGui()
+    app.root.mainloop()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
