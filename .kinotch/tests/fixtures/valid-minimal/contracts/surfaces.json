@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "surfaces": {
+    "cli": {}, "gui_windows": {}, "web": {}, "api": {},
+    "mcp": {}, "agent": {}, "library": {}
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kinotch.local/defaults/catalog.json",
+  "schema_version": 1,
+  "defaults": [
+    {
+      "id": "minimal",
+      "kind": "surface",
+      "description": "最小構成のSurface Default。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": [],
+      "profile": "minimal",
+      "aliases": []
+    },
+    {
+      "id": "web-app",
+      "kind": "surface",
+      "description": "Web application Surface Default。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["web"],
+      "profile": "web-app",
+      "aliases": []
+    },
+    {
+      "id": "cli",
+      "kind": "surface",
+      "description": "Command-line Surface Default。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["cli"],
+      "profile": "cli",
+      "aliases": []
+    },
+    {
+      "id": "windows",
+      "kind": "surface",
+      "description": "Windows desktop Surface Default。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["gui_windows"],
+      "profile": "windows-gui",
+      "aliases": ["windows-gui"]
+    },
+    {
+      "id": "mcp",
+      "kind": "surface",
+      "description": "MCP tool/server Surface Default。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["mcp"],
+      "profile": "mcp",
+      "aliases": []
+    },
+    {
+      "id": "api",
+      "kind": "surface",
+      "description": "HTTP API Surface Default。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["api"],
+      "profile": "api",
+      "aliases": []
+    },
+    {
+      "id": "agent",
+      "kind": "surface",
+      "description": "Agent orchestration Surface Default。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["agent"],
+      "profile": "agent",
+      "aliases": []
+    },
+    {
+      "id": "library",
+      "kind": "surface",
+      "description": "Reusable library/package Surface Default。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["library"],
+      "profile": "library",
+      "aliases": []
+    },
+    {
+      "id": "ci-test",
+      "kind": "tool",
+      "description": "Non-deploying CI test Gate connection。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["minimal", "web", "cli", "gui_windows", "mcp", "api", "agent", "library"],
+      "aliases": []
+    },
+    {
+      "id": "generated-integrity",
+      "kind": "tool",
+      "description": "Canonical-source generated artifact stale checking。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["web", "cli", "api", "library"],
+      "aliases": []
+    },
+    {
+      "id": "file-io",
+      "kind": "tool",
+      "description": "Overrideable file open/save and picker boundary。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["web", "cli", "gui_windows", "library"],
+      "aliases": []
+    },
+    {
+      "id": "pwa",
+      "kind": "tool",
+      "description": "Optional PWA manifest, service worker, and offline hooks。",
+      "default_state": "DEFAULT",
+      "compatible_surfaces": ["web"],
+      "aliases": []
+    }
+  ]
+}

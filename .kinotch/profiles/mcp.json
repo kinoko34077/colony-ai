@@ -1,0 +1,8 @@
+{
+  "profile": "mcp",
+  "status": "planned",
+  "description": "MCP server/tool。",
+  "surfaces": {
+    "mcp": true
+  }
+}

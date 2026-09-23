@@ -1,0 +1,8 @@
+{
+  "profile": "api",
+  "status": "planned",
+  "description": "HTTP API/service。",
+  "surfaces": {
+    "api": true
+  }
+}

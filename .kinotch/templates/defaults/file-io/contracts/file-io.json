@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "kind": "project-file-io-boundary",
+  "helper_scope": "UTF-8 text helper only; binary Projects provide their own byte/path callback.",
+  "operations": [
+    "open",
+    "save",
+    "save_as",
+    "drag_drop",
+    "cancel"
+  ],
+  "callbacks": {
+    "open": "Project supplies format decoding",
+    "save": "Project supplies format encoding",
+    "save_as": "Project supplies format encoding",
+    "drag_drop": "Project supplies accepted path handling",
+    "cancel": "Project supplies cancellation behavior"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KiNoTch Artifact",
+  "type": "object",
+  "required": [
+    "kind"
+  ],
+  "properties": {
+    "kind": {
+      "enum": [
+        "file",
+        "directory",
+        "structured-data",
+        "external-reference"
+      ]
+    },
+    "path": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "mime": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

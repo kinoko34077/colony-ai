@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "colony-ai",
+    "type": "python-cli-gui",
+    "description": "Local Python experiment that runs many LLM nodes and exposes shared CLI and Tkinter GUI entry points."
+  },
+  "profile": "cli",
+  "profiles": [
+    "cli",
+    "windows-gui"
+  ],
+  "runtime": {
+    "modules": []
+  },
+  "surfaces": {
+    "cli": true,
+    "gui_windows": true,
+    "web": false,
+    "api": false,
+    "mcp": false,
+    "agent": false,
+    "library": false
+  },
+  "commands": {
+    "setup": {
+      "exec": "python",
+      "args": ["-m", "pip", "install", "-r", "requirements.txt"],
+      "cwd": ".",
+      "forward_args": false
+    },
+    "dev": {
+      "exec": "python",
+      "args": ["-m", "swarm.gui"],
+      "cwd": ".",
+      "forward_args": false
+    },
+    "test": {
+      "exec": "python",
+      "args": ["-m", "unittest", "discover", "-v"],
+      "cwd": ".",
+      "forward_args": false
+    },
+    "build": "",
+    "verify": "",
+    "smoke": "",
+    "deploy": ""
+  },
+  "paths": {
+    "docs": "docs/",
+    "source": "../swarm/",
+    "tests": "../tests/",
+    "actions": "contracts/actions.json",
+    "surfaces": "contracts/surfaces.json",
+    "defaults": "defaults.json"
+  },
+  "notes": [
+    "This adoption adds the KiNoTch Base and Project Overlay without moving the existing swarm, scripts, tests, or docs directories.",
+    "Ollama execution and model availability remain Project-owned external runtime constraints."
+  ]
+}

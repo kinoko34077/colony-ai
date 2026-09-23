@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KiNoTch Progress Event",
+  "type": "object",
+  "required": [
+    "type"
+  ],
+  "properties": {
+    "type": {
+      "enum": [
+        "started",
+        "progress",
+        "message",
+        "artifact_created",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "current": {
+      "type": "number"
+    },
+    "total": {
+      "type": "number"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

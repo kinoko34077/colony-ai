@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "PROJECT_NAME",
+    "type": "minimal",
+    "description": "Replace with the repository-specific purpose."
+  },
+  "profile": "minimal",
+  "profiles": [
+    "minimal"
+  ],
+  "runtime": {
+    "modules": []
+  },
+  "surfaces": {
+    "cli": false,
+    "gui_windows": false,
+    "web": false,
+    "api": false,
+    "mcp": false,
+    "agent": false,
+    "library": false
+  },
+  "commands": {
+    "setup": "",
+    "dev": "",
+    "test": "",
+    "build": "",
+    "verify": "",
+    "smoke": "",
+    "deploy": ""
+  },
+  "paths": {
+    "docs": "docs/",
+    "source": "src/",
+    "tests": "tests/",
+    "actions": "contracts/actions.json",
+    "surfaces": "contracts/surfaces.json",
+    "defaults": "defaults.json"
+  },
+  "notes": [
+    "Only README.md and project/** are normally edited in an individual repository."
+  ]
+}

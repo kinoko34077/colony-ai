@@ -1,0 +1,24 @@
+name: KiNoTch Default Verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Base / project diagnostics
+        shell: pwsh
+        run: ./.kinotch/scripts/knt.ps1 doctor
+      - name: Project setup
+        shell: pwsh
+        run: ./.kinotch/scripts/knt.ps1 setup
+      - name: Project verification
+        shell: pwsh
+        run: ./.kinotch/scripts/knt.ps1 verify

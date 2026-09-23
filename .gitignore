@@ -1,5 +1,50 @@
-__pycache__/
-*.py[cod]
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Common dependency/build artifacts
+node_modules/
 .venv/
 venv/
-logs/*.jsonl
+__pycache__/
+*.pyc
+target/
+dist/
+build/
+*.egg-info/
+coverage/
+.cache/
+.pytest_cache/
+.vite/
+
+# Runtime/log/temp
+logs/
+.tmp/
+tmp/
+*.log
+.wrangler/
+artifacts/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
+.coverage
+htmlcov/
+*.egg-info/
+.audit/
+*.audit.json
+playwright-report/
+test-results/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Project-local additions belong in project/.gitignore
+.superpowers/

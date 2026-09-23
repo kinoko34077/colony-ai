@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KiNoTch Surface Mapping",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "surfaces"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "surfaces": {
+      "type": "object",
+      "properties": {
+        "cli": { "type": "object" },
+        "gui_windows": { "type": "object" },
+        "web": { "type": "object" },
+        "api": { "type": "object" },
+        "mcp": { "type": "object" },
+        "agent": { "type": "object" },
+        "library": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

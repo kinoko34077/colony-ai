@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kinotch.local/schema/action.schema.json",
+  "title": "KiNoTch Action Registry",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "actions"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "summary"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_.-]+$"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          },
+          "behavior": {
+            "type": "object",
+            "properties": {
+              "side_effect": {
+                "enum": [
+                  "none",
+                  "read",
+                  "write",
+                  "destructive"
+                ]
+              },
+              "cancellable": {
+                "type": "boolean"
+              },
+              "progress": {
+                "type": "boolean"
+              },
+              "idempotent": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": true
+          },
+          "handler": {
+            "type": "string"
+          },
+          "spec": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

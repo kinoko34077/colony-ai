@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "fixture-valid",
+    "type": "minimal",
+    "description": "Valid Base self-test fixture."
+  },
+  "profile": "minimal",
+  "runtime": { "modules": ["kernel", "errors", "config"] },
+  "surfaces": {
+    "cli": false, "gui_windows": false, "web": false, "api": false,
+    "mcp": false, "agent": false, "library": false
+  },
+  "commands": {
+    "setup": "", "dev": "", "test": "", "build": "", "verify": "",
+    "smoke": "", "deploy": ""
+  },
+  "paths": {
+    "docs": "docs/", "source": "src/", "tests": "tests/",
+    "actions": "contracts/actions.json", "surfaces": "contracts/surfaces.json"
+  }
+}

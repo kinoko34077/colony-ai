@@ -1,0 +1,8 @@
+{
+  "profile": "library",
+  "status": "planned",
+  "description": "再利用library/package。",
+  "surfaces": {
+    "library": true
+  }
+}

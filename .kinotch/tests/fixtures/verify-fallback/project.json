@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "project": { "name": "fixture-verify", "type": "minimal" },
+  "profile": "minimal",
+  "runtime": { "modules": [] },
+  "surfaces": {},
+  "commands": {
+    "test": { "run": "if (Get-Command pwsh -ErrorAction SilentlyContinue) { & pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/record-order.ps1 test } else { & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/record-order.ps1 test }", "cwd": "project" },
+    "build": { "run": "if (Get-Command pwsh -ErrorAction SilentlyContinue) { & pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/record-order.ps1 build } else { & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/record-order.ps1 build }", "cwd": "project" }
+  },
+  "paths": {}
+}

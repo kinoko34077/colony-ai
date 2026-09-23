@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "project": { "name": "fixture-missing", "type": "minimal" },
+  "profile": "minimal",
+  "runtime": { "modules": [] },
+  "surfaces": {},
+  "commands": {},
+  "paths": { "docs": "missing-docs/", "actions": "contracts/actions.json", "surfaces": "contracts/surfaces.json" }
+}

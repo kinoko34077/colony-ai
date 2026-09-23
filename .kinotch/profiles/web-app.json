@@ -1,0 +1,8 @@
+{
+  "profile": "web-app",
+  "status": "planned",
+  "description": "Web/PWA。",
+  "surfaces": {
+    "web": true
+  }
+}

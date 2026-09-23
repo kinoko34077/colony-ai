@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KiNoTch Resource",
+  "type": "object",
+  "required": [
+    "kind"
+  ],
+  "properties": {
+    "kind": {
+      "enum": [
+        "file",
+        "directory",
+        "url",
+        "text",
+        "binary",
+        "object"
+      ]
+    },
+    "value": {},
+    "mime": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "access": {
+      "enum": [
+        "read",
+        "write",
+        "read-write"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

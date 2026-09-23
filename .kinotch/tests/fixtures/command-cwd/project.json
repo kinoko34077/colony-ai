@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "project": { "name": "fixture-cwd", "type": "minimal" },
+  "profile": "minimal",
+  "runtime": { "modules": [] },
+  "surfaces": {},
+  "commands": { "test": { "run": "if (Get-Command pwsh -ErrorAction SilentlyContinue) { & pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/record-cwd.ps1 } else { & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/record-cwd.ps1 }", "cwd": "project" } },
+  "paths": {}
+}

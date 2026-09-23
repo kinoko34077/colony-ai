@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KiNoTch Action Result",
+  "type": "object",
+  "required": [
+    "status"
+  ],
+  "properties": {
+    "status": {
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "data": {},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact.schema.json"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "metrics": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

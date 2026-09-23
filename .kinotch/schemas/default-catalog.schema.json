@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kinotch.local/schema/default-catalog.schema.json",
+  "title": "KiNoTch Default Catalog",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "defaults"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "$id": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "defaults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "description",
+          "default_state",
+          "compatible_surfaces"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "surface",
+              "tool"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default_state": {
+            "type": "string",
+            "enum": [
+              "DEFAULT",
+              "OVERRIDE",
+              "DISABLED"
+            ]
+          },
+          "compatible_surfaces": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "profile": {
+            "type": "string",
+            "minLength": 1
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}
