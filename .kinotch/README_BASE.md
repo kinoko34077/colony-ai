@@ -1,6 +1,6 @@
 # KiNoTch. Repository Base — Common README
 
-Base version: `0.3.7`
+Base version: `0.3.8`
 
 この文書はKiNoTch.標準リポジトリの共通取扱説明書である。個別READMEへ同じ説明を複製しない。
 

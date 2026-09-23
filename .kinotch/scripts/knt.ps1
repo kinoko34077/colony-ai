@@ -279,6 +279,23 @@ function Add-RepositoryShapeSurface($SurfaceIds, $SurfaceStates, [string]$Surfac
     }
 }
 
+function Get-ShapeCompatibleSurfaceValues($Catalog, [string[]]$SurfaceIds) {
+    $values = New-Object System.Collections.Generic.List[string]
+    foreach ($surfaceId in @($SurfaceIds | Select-Object -Unique)) {
+        try {
+            $entry = Find-DefaultCatalogEntry -Catalog $Catalog -Identifier $surfaceId -Kind "surface"
+            foreach ($value in @($entry.compatible_surfaces)) {
+                if ($value -notin $values) { [void]$values.Add([string]$value) }
+            }
+        }
+        catch {
+            # Shape detection may find a non-catalog marker. It is reported as
+            # a surface candidate but cannot authorize a Tool Default.
+        }
+    }
+    return @($values)
+}
+
 function Test-IsBaseVerificationWorkflow([string]$Path) {
     if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
     $leaf = Split-Path -Leaf $Path
@@ -390,12 +407,29 @@ function Get-RepositoryShape($Catalog) {
         Add-RepositoryShapeTool -ToolIds $toolIds -ToolStates $toolStates -ToolId "generated-integrity" -State $(if ($hasIntegrityEvidence) { "OVERRIDE" } else { "DEFAULT" })
     }
 
+    # A filename or text marker is not enough to make a Tool Default relevant
+    # to the detected repository shape.  Filter candidates through the same
+    # compatibility rule used by init/migrate so an Agent repository, for
+    # example, is not offered generated-integrity merely because its own
+    # evidence records contain the words "sha256" or "stale".
+    $shapeSurfaceValues = @(Get-ShapeCompatibleSurfaceValues -Catalog $Catalog -SurfaceIds @($surfaceIds))
+    $compatibleToolIds = New-Object System.Collections.Generic.List[string]
+    $compatibleToolStates = @{}
+    foreach ($toolId in @($toolIds | Select-Object -Unique)) {
+        $entry = Find-DefaultCatalogEntry -Catalog $Catalog -Identifier $toolId -Kind "tool"
+        if (-not (Get-DefaultCompatibilityError -Entry $entry -SelectedSurfaces $shapeSurfaceValues)) {
+            [void]$compatibleToolIds.Add($toolId)
+            $state = if ($toolStates.ContainsKey($toolId)) { [string]$toolStates[$toolId] } else { "DEFAULT" }
+            $compatibleToolStates[$toolId] = $state
+        }
+    }
+
     return [pscustomobject]@{
         markers = @($markers | Select-Object -Unique)
         surfaceIds = @($surfaceIds | Select-Object -Unique)
         surfaceStates = $surfaceStates
-        toolIds = @($toolIds | Select-Object -Unique)
-        toolStates = $toolStates
+        toolIds = @($compatibleToolIds | Select-Object -Unique)
+        toolStates = $compatibleToolStates
     }
 }
 

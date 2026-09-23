@@ -1,12 +1,12 @@
 # Current State
 
-Base version: `0.3.7`
+Base version: `0.3.8`
 
-Last verified: 2026-09-23 — Repository Base v0.3.7 Canary adoption
+Last verified: 2026-09-23 — Repository Base v0.3.8 Canary adoption
 
 ## Implemented
 
-- Repository-local KiNoTch Base v0.3.7 and Project Overlay
+- Repository-local KiNoTch Base v0.3.8 and Project Overlay
 - CLI and Windows GUI Surface declarations
 - Existing swarm, scripts, tests, logs, and docs directories retained
 - Structured Python setup, GUI development, and unittest verification commands

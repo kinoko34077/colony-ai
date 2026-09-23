@@ -2,7 +2,7 @@
 
 Current position: Phase 3B safe Default behavior and Phase 4A read-only Canary
 validation are complete. Phase 4B adoption-safety hardening is complete; Phase
-4C has seven clean Canary adoptions, while additional repositories remain
+4C has eight clean Canary adoptions, while additional repositories remain
 explicitly staged until their own verification gates are green.
 Phase 2A Portable Contract validation remains independent and provisional;
 Default adoption does not wait for Portable Contract maturity.
@@ -177,14 +177,14 @@ probeはread-onlyであり、既存repoへBaseファイルやDefaultを投入し
 Surface / Tool互換性、doctor再検証、repository-local `.kinotch/` 書込み境界、
 structured command引数、Project-root path containment、Default Catalog
 semantic validation、既存ファイル衝突時のOVERRIDE記録、Project commandの
-native exit code伝播を実装する。Base v0.3.7
+native exit code伝播と互換Shape候補フィルタを実装する。Base v0.3.8
 としてこの安全点を固定する。
 
 ## Phase 4C — init / migrate and existing repository adoption
 
 既存repoは一括変更せず、`jev-audit`、`kinotch-api`、
 `lyric_reader_page`、`weather-widget`、`memory-game`、
-`Structured-Cell-Automaton`、`2bit-cell-automaton` の初回適用を完了した。
+`Structured-Cell-Automaton`、`2bit-cell-automaton`、`colony-ai` の初回適用を完了した。
 `refil-viewer` はBase適用準備まで完了したが、既存Vite build失敗のため
 clean Canaryには数えない。
 残りのrepoは明示判断

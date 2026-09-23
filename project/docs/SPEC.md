@@ -1,6 +1,6 @@
 # Project Specification
 
-Status: active — Repository Base v0.3.7 Canary adoption
+Status: active — Repository Base v0.3.8 Canary adoption
 
 ## Purpose
 

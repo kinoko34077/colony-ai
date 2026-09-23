@@ -4,7 +4,7 @@
 
 ## 概要
 
-このRepositoryは KiNoTch. Repository Base v0.3.7 に準拠します。
+このRepositoryは KiNoTch. Repository Base v0.3.8 に準拠します。
 
 - 個別情報・仕様・実装: project/
 - 個別プロジェクト定義: project/project.json

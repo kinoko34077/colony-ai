@@ -174,22 +174,27 @@ function Invoke-KntShapeMigrateFixture {
         [switch]$GeneratedFile,
         [switch]$IntegrityEvidence,
         [switch]$UseBaseWorkflow,
-        [switch]$VendorIntegrityEvidence
+        [switch]$VendorIntegrityEvidence,
+        [switch]$NoWebAssets,
+        [switch]$AgentRoot
     )
-    $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("kinotch-shape-test-" + [guid]::NewGuid().ToString("N"))
+    $tempPrefix = if ($AgentRoot) { "kinotch-agent-shape-test-" } else { "kinotch-shape-test-" }
+    $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ($tempPrefix + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
     try {
         Get-ChildItem -Force $RepoRoot | Where-Object {
             $_.Name -notin @(".git", ".superpowers", "project")
         } | Copy-Item -Destination $tempRoot -Recurse -Force
         New-Item -ItemType Directory -Path (Join-Path $tempRoot ".github/workflows") -Force | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $tempRoot "public") -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $tempRoot "package.json") -Value $PackageJson -NoNewline
         if (-not $UseBaseWorkflow) {
             Set-Content -LiteralPath (Join-Path $tempRoot ".github/workflows/verify.yml") -Value $WorkflowText -NoNewline
         }
-        Set-Content -LiteralPath (Join-Path $tempRoot "public/manifest.json") -Value '{"name":"Shape","start_url":"/"}' -NoNewline
-        Set-Content -LiteralPath (Join-Path $tempRoot "service-worker.js") -Value "self.addEventListener('fetch', () => {});" -NoNewline
+        if (-not $NoWebAssets) {
+            New-Item -ItemType Directory -Path (Join-Path $tempRoot "public") -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $tempRoot "public/manifest.json") -Value '{"name":"Shape","start_url":"/"}' -NoNewline
+            Set-Content -LiteralPath (Join-Path $tempRoot "service-worker.js") -Value "self.addEventListener('fetch', () => {});" -NoNewline
+        }
         if ($GeneratedFile) {
             New-Item -ItemType Directory -Path (Join-Path $tempRoot "src") -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $tempRoot "src/generated-output.js") -Value "export default 'generated';" -NoNewline
@@ -594,6 +599,13 @@ Invoke-TestCase "shape probe ignores vendored public integrity text" {
         Assert-True ($output -notmatch "Candidate Default Pack 'generated-integrity'") "vendored public integrity text was misclassified as Project generated-integrity"
     }
 }
+Invoke-TestCase "shape probe filters incompatible Tool evidence" {
+    Invoke-KntShapeMigrateFixture -AgentRoot -NoWebAssets -UseBaseWorkflow -IntegrityEvidence -PackageJson '{"scripts":{"test":"python -m unittest"}}' -AssertOutput {
+        param($root, $output)
+        Assert-True ($output -match "Detected Surface candidates:.*agent") "Agent shape was not detected"
+        Assert-True ($output -notmatch "Candidate Default Pack 'generated-integrity'") "incompatible generated-integrity evidence was offered to Agent shape"
+    }
+}
 Invoke-TestCase "shape probe does not treat Wrangler-only Web as API" {
     Invoke-KntShapeMigrateFixture -PackageJson '{"scripts":{"test":"node --test","build":"npm run build"},"devDependencies":{"wrangler":"latest"}}' -AssertOutput {
         param($root, $output)
@@ -944,7 +956,7 @@ Invoke-TestCase "Base documentation and profile status are finalized" {
     Assert-True ($runtime -match "ActionRequest") "Runtime candidate-contract content is missing"
     Assert-True ($workflow -match "knt\.ps1 setup") "Base CI setup step is missing"
     Assert-Equal 0 @($surfaceRegistry.surfaces.PSObject.Properties).Count "Base Surface Registry should be empty"
-    Assert-Equal "0.3.7" $baseVersion "Base version"
+    Assert-Equal "0.3.8" $baseVersion "Base version"
     Assert-True (@($catalog.defaults | Where-Object { $_.kind -eq "surface" }).Count -ge 8) "Surface Default catalog entries are incomplete"
     Assert-Equal 4 @($catalog.defaults | Where-Object { $_.kind -eq "tool" }).Count "Active Tool Default catalog count"
     foreach ($profileFile in Get-ChildItem (Join-Path $RepoRoot ".kinotch/profiles") -File) {
