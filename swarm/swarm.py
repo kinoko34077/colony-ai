@@ -276,6 +276,10 @@ class ExperimentResult:
     timings: dict[str, Any]
 
 
+class ExperimentCancelled(RuntimeError):
+    """Raised after a cooperative cancellation request reaches a safe boundary."""
+
+
 def readout_prompt(original_prompt: str, recent_generations: Sequence[Sequence[str]]) -> str:
     sections = [f"Generation {index}:\n" + "\n".join(values) for index, values in enumerate(recent_generations, 1)]
     return "【元の問い】\n" + original_prompt + "\n\n" + "\n\n".join(sections)
@@ -309,6 +313,7 @@ async def run_experiment(
     node_system_prompt: str | None = None,
     readout_system_prompt: str | None = None,
     finalizer_system_prompt: str | None = None,
+    cancel_requested: Callable[[], bool] | None = None,
 ) -> ExperimentResult:
     """Run synchronized generations, readouts, and the final synthesis."""
     if not original_prompt.strip():
@@ -325,6 +330,23 @@ async def run_experiment(
     readouts: list[str] = []
     generation_elapsed: list[float] = []
     previous_generation: list[str] = []
+    cancellation_logged = False
+
+    def raise_if_cancelled() -> None:
+        nonlocal cancellation_logged
+        if cancel_requested is None or not cancel_requested():
+            return
+        if not cancellation_logged:
+            event = {
+                "event": "cancelled",
+                "generation_count": len(generations),
+                "elapsed_seconds": time.perf_counter() - started,
+            }
+            logger.write(event)
+            if event_callback is not None:
+                event_callback(event)
+            cancellation_logged = True
+        raise ExperimentCancelled("experiment cancelled")
 
     async def node_generator(node_index: int, prompt: str, samples: Sequence[str], generation: int) -> str:
         response = await client.generate(node_system_prompt, prompt, settings, settings.max_output_chars)
@@ -333,6 +355,7 @@ async def run_experiment(
         return response.content
 
     for generation in range(1, settings.max_generations + 1):
+        raise_if_cancelled()
         if progress_callback is not None:
             progress_callback(f"Generation {generation}/{settings.max_generations}")
         generation_started = time.perf_counter()
@@ -359,6 +382,7 @@ async def run_experiment(
         }
         if event_callback is not None:
             event_callback(generation_event)
+        raise_if_cancelled()
         if generation % settings.readout_interval == 0:
             recent = generations[-settings.readout_interval :]
             response = await client.generate(
@@ -381,7 +405,9 @@ async def run_experiment(
                 event_callback(readout_event)
             if progress_callback is not None:
                 progress_callback(f"=== READOUT {generation - len(recent) + 1}-{generation} ===\n{readout}")
+            raise_if_cancelled()
 
+    raise_if_cancelled()
     final_response = await client.generate(
         finalizer_system_prompt,
         finalizer_prompt(original_prompt, readouts),
