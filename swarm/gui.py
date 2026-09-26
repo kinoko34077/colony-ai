@@ -10,6 +10,7 @@ from .swarm import (
     FINALIZER_SYSTEM_PROMPT,
     NODE_SYSTEM_PROMPT,
     READOUT_SYSTEM_PROMPT,
+    ExperimentCancelled,
     ExperimentResult,
     OllamaClient,
     Settings,
@@ -41,12 +42,13 @@ def connection_status_text(info: dict[str, Any] | None = None, error: str | None
     return f"接続OK: Ollama {version}"
 
 
+def format_generation(generation: int, outputs: list[str]) -> str:
+    values = "\n".join(f"Node {index}: {output or '(空)'}" for index, output in enumerate(outputs, 1))
+    return f"Generation {generation}\n{values}"
+
+
 def format_generations(generations: list[list[str]]) -> str:
-    sections = []
-    for generation, outputs in enumerate(generations, 1):
-        values = "\n".join(f"Node {index}: {output or '(空)'}" for index, output in enumerate(outputs, 1))
-        sections.append(f"Generation {generation}\n{values}")
-    return "\n\n".join(sections)
+    return "\n\n".join(format_generation(generation, outputs) for generation, outputs in enumerate(generations, 1))
 
 
 def format_readouts(readouts: list[str]) -> str:
@@ -86,8 +88,8 @@ class SwarmGui:
         self.readout_output = tk.Text(self.root, height=18, width=42, state="disabled", wrap="word")
         self.final_output = tk.Text(self.root, height=7, width=90, state="disabled", wrap="word")
         self.system_prompts = {}
-        self.start_button = ttk.Button(self.root, text="実行", command=self.start)
-        self.check_button = ttk.Button(self.root, text="接続確認", command=self.check_connection)
+        self.config_widgets = [self.prompt]
+        self.cancel_event = threading.Event()
         self.live_generations: dict[int, dict[int, str]] = {}
         self.live_readouts: list[str] = []
         self._build(ttk)
@@ -107,21 +109,41 @@ class SwarmGui:
             editor.pack(fill="both", expand=True)
             notebook.add(frame, text=label)
             self.system_prompts[key] = editor
+            self.config_widgets.append(editor)
         notebook.grid(row=1, column=0, columnspan=6, sticky="nsew", padx=8, pady=4)
+
         labels = [("model", "モデル"), ("nodes", "ノード"), ("generations", "世代"), ("readout_interval", "Readout周期"), ("seed", "seed")]
         for column, (key, label) in enumerate(labels):
             ttk.Label(self.root, text=label).grid(row=2, column=column, sticky="w", padx=8)
-            ttk.Entry(self.root, textvariable=self.vars[key], width=16).grid(row=3, column=column, padx=8, pady=4)
+            entry = ttk.Entry(self.root, textvariable=self.vars[key], width=16)
+            entry.grid(row=3, column=column, padx=8, pady=4)
+            self.config_widgets.append(entry)
+
         ttk.Label(self.root, text="Readout文字数上限").grid(row=4, column=0, sticky="w", padx=8)
-        ttk.Entry(self.root, textvariable=self.vars["readout_max_chars"], width=12).grid(row=4, column=1, padx=8)
+        readout_limit_entry = ttk.Entry(self.root, textvariable=self.vars["readout_max_chars"], width=12)
+        readout_limit_entry.grid(row=4, column=1, padx=8)
+        self.config_widgets.append(readout_limit_entry)
         ttk.Label(self.root, text="Finalizer文字数上限").grid(row=4, column=2, sticky="w", padx=8)
-        ttk.Entry(self.root, textvariable=self.vars["finalizer_max_chars"], width=12).grid(row=4, column=3, padx=8)
+        finalizer_limit_entry = ttk.Entry(self.root, textvariable=self.vars["finalizer_max_chars"], width=12)
+        finalizer_limit_entry.grid(row=4, column=3, padx=8)
+        self.config_widgets.append(finalizer_limit_entry)
         ttk.Label(self.root, text="空欄=制限なし").grid(row=4, column=4, sticky="w", padx=8)
+
         ttk.Label(self.root, text="Ollama URL").grid(row=5, column=0, sticky="w", padx=8)
-        ttk.Entry(self.root, textvariable=self.vars["ollama_url"], width=32).grid(row=5, column=1, columnspan=2, sticky="w", padx=8)
+        ollama_entry = ttk.Entry(self.root, textvariable=self.vars["ollama_url"], width=32)
+        ollama_entry.grid(row=5, column=1, columnspan=2, sticky="w", padx=8)
+        self.config_widgets.append(ollama_entry)
         ttk.Label(self.root, textvariable=self.status_var).grid(row=5, column=3, sticky="w", padx=8)
-        self.check_button.grid(row=5, column=5, padx=8, pady=6)
-        self.start_button.grid(row=5, column=4, padx=8, pady=6)
+
+        action_frame = ttk.Frame(self.root)
+        action_frame.grid(row=5, column=4, columnspan=2, sticky="e", padx=8, pady=6)
+        self.start_button = ttk.Button(action_frame, text="実行", command=self.start)
+        self.stop_button = ttk.Button(action_frame, text="停止", command=self.stop, state="disabled")
+        self.check_button = ttk.Button(action_frame, text="接続確認", command=self.check_connection)
+        self.start_button.pack(side="left", padx=2)
+        self.stop_button.pack(side="left", padx=2)
+        self.check_button.pack(side="left", padx=2)
+
         ttk.Label(self.root, text="各ノードの直接出力").grid(row=6, column=0, columnspan=3, sticky="w", padx=8)
         ttk.Label(self.root, text="5世代ごとの要約").grid(row=6, column=3, columnspan=3, sticky="w", padx=8)
         generation_frame = ttk.Frame(self.root)
@@ -153,12 +175,37 @@ class SwarmGui:
         self.root.grid_rowconfigure(7, weight=1)
         self.root.grid_rowconfigure(9, weight=1)
 
+    @staticmethod
+    def _is_at_bottom(widget) -> bool:
+        try:
+            return widget.yview()[1] >= 0.999
+        except Exception:
+            return True
+
     def _set_text(self, widget, text: str) -> None:
+        follow_latest = self._is_at_bottom(widget)
         widget.configure(state="normal")
         widget.delete("1.0", "end")
         widget.insert("end", text)
-        widget.see("end")
+        if follow_latest:
+            widget.see("end")
         widget.configure(state="disabled")
+
+    def _append_text(self, widget, text: str) -> None:
+        follow_latest = self._is_at_bottom(widget)
+        widget.configure(state="normal")
+        widget.insert("end", text)
+        if follow_latest:
+            widget.see("end")
+        widget.configure(state="disabled")
+
+    def _set_running_state(self, running: bool) -> None:
+        config_state = "disabled" if running else "normal"
+        for widget in self.config_widgets:
+            widget.configure(state=config_state)
+        self.start_button.configure(state="disabled" if running else "normal")
+        self.check_button.configure(state="disabled" if running else "normal")
+        self.stop_button.configure(state="normal" if running else "disabled")
 
     def check_connection(self) -> None:
         url = self.vars["ollama_url"].get().strip()
@@ -184,9 +231,10 @@ class SwarmGui:
         except (KeyError, ValueError) as exc:
             self.status_var.set(f"入力エラー: {exc}")
             return
+
         log_path = Path("logs") / ("gui-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".jsonl")
-        self.start_button.configure(state="disabled")
-        self.check_button.configure(state="disabled")
+        self.cancel_event.clear()
+        self._set_running_state(True)
         self.live_generations = {}
         self.live_readouts = []
         self._set_text(self.generation_output, "")
@@ -203,32 +251,42 @@ class SwarmGui:
                         log_path,
                         seed=seed,
                         progress_callback=lambda message: self.root.after(0, self.status_var.set, message),
-                        event_callback=lambda event: self.root.after(0, self._handle_event, event),
+                        event_callback=self._queue_event,
                         node_system_prompt=system_prompts["node"],
                         readout_system_prompt=system_prompts["readout"],
                         finalizer_system_prompt=system_prompts["finalizer"],
+                        cancel_requested=self.cancel_event.is_set,
                     )
                 )
                 self.root.after(0, self._finish, result, str(log_path))
+            except ExperimentCancelled:
+                self.root.after(0, self._cancelled, str(log_path))
             except Exception as exc:
                 self.root.after(0, self._fail, str(exc))
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def stop(self) -> None:
+        self.cancel_event.set()
+        self.status_var.set("停止要求中... 現在の世代完了後に停止します")
+        self.stop_button.configure(state="disabled")
+
+    def _queue_event(self, event: dict[str, Any]) -> None:
+        if event.get("event") == "node":
+            return
+        self.root.after(0, self._handle_event, event)
+
     def _handle_event(self, event: dict[str, Any]) -> None:
         event_type = event.get("event")
-        if event_type == "node":
+        if event_type == "generation":
             generation = int(event["generation"])
-            node_index = int(event["node_index"])
-            self.live_generations.setdefault(generation, {})[node_index] = event.get("normalized_output", "")
-            generations = []
-            for number in sorted(self.live_generations):
-                nodes = self.live_generations[number]
-                generations.append([nodes[index] for index in sorted(nodes)])
-            self._set_text(self.generation_output, format_generations(generations))
+            outputs = list(event.get("outputs") or [])
+            self.live_generations[generation] = {index: output for index, output in enumerate(outputs)}
+            self._append_text(self.generation_output, format_generation(generation, outputs) + "\n\n")
         elif event_type == "readout":
-            self.live_readouts.append(event.get("readout", ""))
-            self._set_text(self.readout_output, format_readouts(self.live_readouts))
+            readout = event.get("readout", "")
+            self.live_readouts.append(readout)
+            self._append_text(self.readout_output, f"Readout #{len(self.live_readouts)}\n{readout}\n\n")
         elif event_type == "finalizer":
             self._set_text(self.final_output, event.get("final_answer", ""))
 
@@ -238,13 +296,16 @@ class SwarmGui:
         self._set_text(self.generation_output, rendered["generations"])
         self._set_text(self.readout_output, rendered["readouts"])
         self._set_text(self.final_output, rendered["final"])
-        self.start_button.configure(state="normal")
-        self.check_button.configure(state="normal")
+        self._set_running_state(False)
+
+    def _cancelled(self, log_path: str) -> None:
+        self.status_var.set("停止しました")
+        self._append_text(self.final_output, f"\n\n停止済み\nLog: {log_path}")
+        self._set_running_state(False)
 
     def _fail(self, message: str) -> None:
         self.status_var.set(f"実行失敗: {message}")
-        self.start_button.configure(state="normal")
-        self.check_button.configure(state="normal")
+        self._set_running_state(False)
 
 
 def main() -> int:
