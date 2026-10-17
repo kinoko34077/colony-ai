@@ -383,8 +383,15 @@ async def run_experiment(
         if event_callback is not None:
             event_callback(generation_event)
         raise_if_cancelled()
-        if generation % settings.readout_interval == 0:
-            recent = generations[-settings.readout_interval :]
+        interval_boundary = generation % settings.readout_interval == 0
+        final_partial_batch = generation == settings.max_generations and not interval_boundary
+        if interval_boundary or final_partial_batch:
+            batch_size = (
+                settings.readout_interval
+                if interval_boundary
+                else generation % settings.readout_interval
+            )
+            recent = generations[-batch_size:]
             response = await client.generate(
                 readout_system_prompt,
                 readout_prompt(original_prompt, recent),
