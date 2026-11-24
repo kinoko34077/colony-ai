@@ -142,11 +142,52 @@ class RunnerTests(unittest.TestCase):
 
         self.assertEqual(len(result.generations), 3)
         self.assertEqual([len(g) for g in result.generations], [2, 2, 2])
-        self.assertEqual(len(result.readouts), 1)
+        self.assertEqual(len(result.readouts), 2)
         self.assertEqual(result.final_answer, "最終回答")
         node_prompts = [user for system, user, _ in client.calls if "観測記録全体" not in system and "直近5世代分" not in system]
         self.assertTrue(node_prompts)
         self.assertTrue(all("観測された変化" not in prompt for prompt in node_prompts))
+
+    def test_readout_batches_cover_every_completed_generation_once(self):
+        from swarm.swarm import Settings, run_experiment
+
+        class DistinctReadouts(FakeClient):
+            async def generate(self, system_prompt, user_prompt, settings, max_chars=None):
+                response = await super().generate(system_prompt, user_prompt, settings, max_chars)
+                if "直近5世代分" in system_prompt:
+                    response.content = f"batch-{sum('直近5世代分' in call[0] for call in self.calls)}-summary"
+                return response
+
+        for count, expected in [(7, [(1, 5), (6, 7)]), (2, [(1, 2)]), (10, [(1, 5), (6, 10)])]:
+            with self.subTest(count=count):
+                client = DistinctReadouts()
+                callbacks = []
+                progress = []
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "run.jsonl"
+                    result = asyncio.run(run_experiment(
+                        "問い", Settings(node_count=1, max_generations=count, readout_interval=5),
+                        client, path, seed=7, event_callback=callbacks.append,
+                        progress_callback=progress.append,
+                    ))
+                    events = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+                records = [e for e in events if e["event"] == "readout"]
+                self.assertEqual([(e["generation_start"], e["generation_end"]) for e in records], expected)
+                self.assertEqual([e for e in callbacks if e["event"] == "readout"], records)
+                self.assertEqual(len(result.readouts), len(expected))
+                observer_inputs = [user for system, user, _ in client.calls if "直近5世代分" in system]
+                self.assertEqual(len(observer_inputs), len(expected))
+                for user, (start, end) in zip(observer_inputs, expected):
+                    self.assertEqual(user.count("Generation "), end - start + 1)
+                    for generation in range(1, count + 1):
+                        self.assertEqual(f"ノード{generation}" in user.splitlines(), start <= generation <= end)
+                final_inputs = [user for system, user, _ in client.calls if "観測記録全体" in system]
+                self.assertEqual(len(final_inputs), 1)
+                self.assertEqual(result.readouts, [f"batch-{i}-summary" for i in range(1, len(expected) + 1)])
+                for readout in result.readouts:
+                    self.assertEqual(final_inputs[0].count(readout), 1)
+                self.assertEqual(len([line for line in progress if line.startswith("=== READOUT ")]), len(expected))
+                self.assertEqual(events[-1]["event"], "complete")
 
     def test_finalizer_receives_original_prompt_and_all_readouts(self):
         from swarm.swarm import Settings, run_experiment
